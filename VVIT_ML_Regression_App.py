@@ -19,17 +19,23 @@ from sklearn.svm import SVC
 st.title("🏦 Credit Score Prediction Dashboard")
 
 # ---------------------------
-# Load Dataset
+# Load Dataset (FROM URL)
 # ---------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("CreditScoring.csv")
+    url = "https://raw.githubusercontent.com/pragyanaischool/VVIT_ML_Projects_3_CreditScore/refs/heads/main/CreditScoring.csv"
+    df = pd.read_csv(url)
     return df
 
 df = load_data()
 
 # ---------------------------
-# Sidebar Navigation
+# Basic Cleaning
+# ---------------------------
+df.columns = df.columns.str.strip()
+
+# ---------------------------
+# Sidebar Menu
 # ---------------------------
 menu = st.sidebar.selectbox("Menu", [
     "EDA Dashboard",
@@ -39,45 +45,59 @@ menu = st.sidebar.selectbox("Menu", [
 ])
 
 # ---------------------------
-# EDA Dashboard
+# EDA
 # ---------------------------
 if menu == "EDA Dashboard":
 
-    st.subheader("📊 Dataset Overview")
+    st.subheader("📊 Dataset Preview")
     st.write(df.head())
 
-    st.subheader("📈 Class Distribution")
-    st.bar_chart(df['Credit_Score'].value_counts())
+    st.subheader("📈 Data Types")
+    st.write(df.dtypes)
 
-    st.subheader("📊 Correlation Heatmap")
+    st.subheader("📊 Missing Values")
+    st.write(df.isnull().sum())
 
+    # Convert numeric columns
     numeric_df = df.select_dtypes(include=np.number)
 
-    fig, ax = plt.subplots()
-    sns.heatmap(numeric_df.corr(), annot=True, ax=ax)
-    st.pyplot(fig)
+    if not numeric_df.empty:
+        fig, ax = plt.subplots()
+        sns.heatmap(numeric_df.corr(), annot=True, ax=ax)
+        st.pyplot(fig)
 
 # ---------------------------
-# Preprocessing
+# Preprocessing Function
 # ---------------------------
 def preprocess(df):
 
-    df = df.dropna()
+    df = df.copy()
 
+    # Fill missing values
+    for col in df.columns:
+        if df[col].dtype == "object":
+            df[col] = df[col].fillna(df[col].mode()[0])
+        else:
+            df[col] = df[col].fillna(df[col].median())
+
+    # Encode categorical columns
     le = LabelEncoder()
-
     for col in df.select_dtypes(include='object').columns:
         df[col] = le.fit_transform(df[col])
 
-    X = df.drop('Credit_Score', axis=1)
-    y = df['Credit_Score']
+    # Target column (auto detect last column)
+    target_col = df.columns[-1]
 
+    X = df.drop(target_col, axis=1)
+    y = df[target_col]
+
+    # Scaling
     scaler = StandardScaler()
-    X = scaler.fit_transform(X)
+    X_scaled = scaler.fit_transform(X)
 
-    return X, y, scaler
+    return X_scaled, y, scaler, X.columns
 
-X, y, scaler = preprocess(df)
+X, y, scaler, feature_names = preprocess(df)
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
@@ -106,18 +126,15 @@ if menu == "Model Training":
         model = SVC()
 
     model.fit(X_train, y_train)
-
     y_pred = model.predict(X_test)
-
-    st.subheader("📊 Results")
 
     st.write("Accuracy:", accuracy_score(y_test, y_pred))
 
     st.text("Classification Report")
     st.text(classification_report(y_test, y_pred))
 
+    # Confusion Matrix
     cm = confusion_matrix(y_test, y_pred)
-
     fig, ax = plt.subplots()
     sns.heatmap(cm, annot=True, fmt='d', ax=ax)
     st.pyplot(fig)
@@ -127,7 +144,7 @@ if menu == "Model Training":
 # ---------------------------
 if menu == "Hyperparameter Tuning":
 
-    st.subheader("⚙️ GridSearchCV")
+    st.subheader("⚙️ Hyperparameter Tuning")
 
     model_name = st.selectbox("Select Model", [
         "Random Forest",
@@ -164,17 +181,18 @@ if menu == "Prediction":
 
     st.subheader("🔮 Predict Credit Score")
 
-    inputs = []
+    user_inputs = []
 
-    for col in df.drop('Credit_Score', axis=1).columns:
-        val = st.number_input(col)
-        inputs.append(val)
+    for col in feature_names:
+        val = st.number_input(f"{col}", value=0.0)
+        user_inputs.append(val)
 
+    # Train model once
     model = RandomForestClassifier()
     model.fit(X_train, y_train)
 
     if st.button("Predict"):
-        data = scaler.transform([inputs])
+        data = scaler.transform([user_inputs])
         pred = model.predict(data)
 
         st.success(f"Predicted Credit Score: {pred[0]}")
