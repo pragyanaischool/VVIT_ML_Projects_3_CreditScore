@@ -23,7 +23,7 @@ st.title("🏦 Credit Score Prediction Dashboard")
 # ---------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("credit_score.csv")
+    df = pd.read_csv("CreditScoring.csv")
     return df
 
 df = load_data()
